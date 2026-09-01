@@ -134,7 +134,7 @@ Exit criteria: LEDs track a full voice interaction end to end.
 - [x] Handle `light_command`, matching on `object_id`
 - [x] Declare a `"Voice Assistant"` effect that runs the pipeline animations,
       plus any static effects worth exposing
-- [ ] Confirm the entity appears in HA under the ESPHome device
+- [x] Confirm the entity appears in HA under the ESPHome device
 
 Note: LVA PR #373 fixed a race between LVA registering with HA and peripherals
 registering their entities. `--peripheral-startup-wait` (default 2.0s) governs
@@ -150,9 +150,9 @@ auto-deploys anything under `/compose/`. Needs:
 - `depends_on` won't help across compose projects — rely on the reconnect loop
 
 - [x] Write `Dockerfile` and `docker-compose.yml`
-- [ ] Deploy under `/compose/leds/` and confirm PiCompose picks it up
-- [ ] Verify it survives a reboot
-- [ ] Verify it recovers when LVA restarts
+- [x] Deploy under `/compose/leds/` and confirm PiCompose picks it up
+- [x] Verify it survives a reboot
+- [x] Verify it recovers when LVA restarts
 
 ## Out of Scope
 
