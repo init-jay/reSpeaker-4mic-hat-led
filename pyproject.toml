@@ -4,16 +4,22 @@ version = "0.1.0"
 description = "APA102 LED peripheral for Linux Voice Assistant on the ReSpeaker 4-Mic Array"
 requires-python = ">=3.11"
 dependencies = [
-    # Hardware access only exists on the Pi; the markers keep `uv sync` working
-    # on a development machine, where spidev will not even build.
-    "spidev>=3.6 ; sys_platform == 'linux'",
+    # gpiozero is pure Python; the marker keeps `uv sync` sane on a development
+    # machine, where the Pi hardware does not exist anyway.
     "gpiozero>=2.0 ; sys_platform == 'linux'",
-    # gpiozero needs a pin factory; lgpio is the working backend on current
-    # Raspberry Pi OS kernels (RPi.GPIO is unmaintained and does not work here).
-    "lgpio>=0.2.2 ; sys_platform == 'linux'",
     # Phase 2 onwards.
     "websockets>=13",
 ]
+
+# Deliberately NOT listed above, and installed from apt on the Pi instead:
+#
+#   python3-lgpio    gpiozero's pin factory. The PyPI build needs swig and
+#                    links against the lgpio C library.
+#   python3-spidev   a C extension, so from PyPI it needs a compiler and headers.
+#
+# Both are prebuilt on Raspberry Pi OS, which keeps a build toolchain out of the
+# picture entirely — including the Phase 5 image. The venv is created with
+# --system-site-packages so it can import them; see README.md.
 
 [tool.uv]
 package = false
