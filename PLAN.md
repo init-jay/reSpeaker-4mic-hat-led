@@ -61,6 +61,28 @@ Events we care about, in rough pipeline order:
 | `timer_ringing` | Attention animation |
 | `volume_changed` | Brief level indication on the ring |
 
+### Observed (Phase 2, real capture)
+
+```
+wake_word_detected -> listening -> stt_text -> thinking -> tts_speaking
+                   -> tts_text -> tts_finished -> idle
+```
+
+- `stt_text` and `tts_text` both carry `{"text": ...}`. `wake_word_detected`,
+  `listening`, `thinking`, `tts_speaking`, `tts_finished` and `idle` carry no
+  data.
+- `snapshot` carries `muted`, `volume`, `ha_connected`, `last_stt_text`,
+  `last_tts_text`.
+- `thinking` lasted under a second — `stt_text`, `thinking` and `tts_speaking`
+  all arrived in the same second. Transient animations need a minimum display
+  time or they will not be seen.
+- `tts_speaking` has no duration, and fired a second before `tts_text`, so it
+  marks synthesis rather than playback. Pulse free-running until `tts_finished`
+  rather than timing it.
+- `tts_finished` and `idle` arrive back to back. Fade on `idle`, not on both.
+- `ha_connected` in the snapshot means LVA<->HA connectivity is distinct from
+  our socket to LVA. Two different failure modes, not one.
+
 `light_command` arrives when HA changes a Light entity we registered — carries
 `object_id`, `state`, `brightness`, `red`, `green`, `blue`, `effect`. The effect
 names are the ones we declare at registration.
@@ -84,7 +106,7 @@ Exit criteria: LEDs respond to a script run directly on the host.
 - [x] Handle the `snapshot` event on connect to pick up initial state
 - [x] Reconnect loop with backoff — a WebSocket failure means LVA is down,
       which is itself a "disconnected" condition and should show that animation
-- [ ] Trigger the wake word and confirm the expected event sequence arrives
+- [x] Trigger the wake word and confirm the expected event sequence arrives
 
 Exit criteria: full event stream logged during a voice interaction.
 
