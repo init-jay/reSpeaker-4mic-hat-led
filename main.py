@@ -22,7 +22,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional, TextIO
 
-from websockets.asyncio.client import connect
+try:
+    from websockets.asyncio.client import connect
+except ImportError:  # websockets < 13, as packaged by some distributions
+    from websockets.client import connect  # type: ignore[no-redef]
 from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
 import animations

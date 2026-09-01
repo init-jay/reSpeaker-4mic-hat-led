@@ -116,6 +116,35 @@ Brightness from HA is applied to the colour values rather than the APA102's
 brightness field, which has only 31 steps — too few to dim smoothly.
 `--brightness` stays fixed as the hardware ceiling for the room.
 
+## Phase 5 — deployment
+
+Runs as a compose project, which PiCompose auto-deploys from `/compose/`:
+
+```sh
+sudo git clone https://github.com/init-jay/reSpeaker-4mic-hat-led /compose/leds
+cd /compose/leds
+docker compose up -d --build
+docker compose logs -f
+```
+
+The image installs `python3-lgpio`, `python3-spidev`, `python3-gpiozero` and
+`python3-websockets` from apt, so there is no compiler and no pip in it — the
+same reasoning as the host setup above.
+
+It needs three things from the host, all in `docker-compose.yml`:
+
+- `network_mode: host`, because LVA runs that way and its peripheral API is
+  only on the host's own localhost
+- `/dev/spidev0.0`, the ring
+- `/dev/gpiochip0`, for GPIO5 which gates power to the ring. lgpio uses the
+  character device rather than the older `/dev/gpiomem`, so `privileged: true`
+  is not needed
+
+There is deliberately no `depends_on`: LVA is a separate compose project, and
+the reconnect loop copes with it being absent or restarting.
+
+Change flags in the `command:` line, then `docker compose up -d`.
+
 ## Development on a non-Pi machine
 
 `gpiozero` is marked `sys_platform == 'linux'`, so `uv sync` works on macOS and

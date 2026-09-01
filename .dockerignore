@@ -1,0 +1,10 @@
+.git/
+.venv/
+__pycache__/
+*.py[cod]
+events.jsonl
+test_leds.py
+PLAN.md
+README.md
+uv.lock
+pyproject.toml

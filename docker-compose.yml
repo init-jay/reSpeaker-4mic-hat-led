@@ -1,0 +1,32 @@
+services:
+  leds:
+    build: .
+    image: lva-leds
+    container_name: lva-leds
+
+    # LVA runs with network_mode: host, so its peripheral API is only reachable
+    # on the host's own localhost.
+    network_mode: host
+
+    devices:
+      # The LED ring.
+      - /dev/spidev0.0:/dev/spidev0.0
+      # GPIO5, which gates power to the ring. lgpio uses the character device,
+      # not the older /dev/gpiomem. On a Pi 5 this is a different chip number.
+      - /dev/gpiochip0:/dev/gpiochip0
+
+    command: ["--brightness", "5"]
+
+    restart: unless-stopped
+
+    # No depends_on: LVA is a separate compose project, and the reconnect loop
+    # handles it being absent or restarting anyway.
+
+    # Long enough for the ring to be blanked on the way down.
+    stop_grace_period: 10s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

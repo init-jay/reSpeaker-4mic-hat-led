@@ -149,7 +149,7 @@ auto-deploys anything under `/compose/`. Needs:
 - `/dev/gpiomem` mapped, or `privileged: true` for GPIO5
 - `depends_on` won't help across compose projects — rely on the reconnect loop
 
-- [ ] Write `Dockerfile` and `docker-compose.yml`
+- [x] Write `Dockerfile` and `docker-compose.yml`
 - [ ] Deploy under `/compose/leds/` and confirm PiCompose picks it up
 - [ ] Verify it survives a reboot
 - [ ] Verify it recovers when LVA restarts
