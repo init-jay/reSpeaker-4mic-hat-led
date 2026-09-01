@@ -74,15 +74,15 @@ Prove the hardware before involving LVA at all.
 - [x] Write `apa102.py`: SPI init, GPIO5 enable, `set_pixel`, `show`, `clear`
 - [x] Source the APA102 logic from wyoming-satellite `examples/4mic_leds.py`
 - [x] Test script: cycle all 12 LEDs through red, green, blue, off
-- [ ] Confirm brightness control works and there's no flicker
+- [x] Confirm brightness control works and there's no flicker
 
 Exit criteria: LEDs respond to a script run directly on the host.
 
 ### Phase 2 — WebSocket client
 
-- [ ] `main.py`: connect to `ws://localhost:6055`, log every event received
-- [ ] Handle the `snapshot` event on connect to pick up initial state
-- [ ] Reconnect loop with backoff — a WebSocket failure means LVA is down,
+- [x] `main.py`: connect to `ws://localhost:6055`, log every event received
+- [x] Handle the `snapshot` event on connect to pick up initial state
+- [x] Reconnect loop with backoff — a WebSocket failure means LVA is down,
       which is itself a "disconnected" condition and should show that animation
 - [ ] Trigger the wake word and confirm the expected event sequence arrives
 

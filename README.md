@@ -45,6 +45,19 @@ the ring.
 
 Useful flags: `--brightness 1-31`, `--hold`, `--step`, `--num-leds`.
 
+## Phase 2 — event stream
+
+```sh
+uv run python main.py --record events.jsonl
+```
+
+Connects to `ws://localhost:6055`, logs every event, and reconnects with
+exponential backoff (1s doubling to 30s) whenever LVA goes away. `--record`
+appends each event to a JSONL file, which is what Phase 3 maps to animations.
+`--uri` points it elsewhere, `-v` adds raw traffic.
+
+Trigger the wake word and watch the pipeline events arrive. Ctrl-C to stop.
+
 ## Development on a non-Pi machine
 
 `gpiozero` is marked `sys_platform == 'linux'`, so `uv sync` works on macOS and
