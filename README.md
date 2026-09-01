@@ -19,30 +19,31 @@ Demo of the LED ring tracking a voice interaction.
 ## Requirements
 
 - A Raspberry Pi with a ReSpeaker 4-Mic Array HAT
-- Linux Voice Assistant already running on it, with its peripheral API on
+- This
+  [seeed-voicecard-4mic](https://github.com/init-jay/seeed-voicecard-4mic)
+  forked driver for current kernels, minimal changes to make the mics work.
+- Linux Voice Assistant already running on the Pi, with its peripheral API on
   `ws://localhost:6055` (the default)
 - Docker with the compose plugin
 
 [PiCompose](https://github.com/florian-asche/PiCompose) is the recommended way
 to get Linux Voice Assistant onto the Pi in the first place, and is what this
-was built against. It deploys anything under `/compose/`, so if you are using
-it, put this there and it will be picked up like the rest.
-
-SPI is enabled by the `seeed-4mic-voicecard` overlay, so `/dev/spidev0.0`
-should already exist. Check with `ls /dev/spidev*`.
+was built against. It deploys anything under `/compose/`,
 
 ## Install
 
 ```sh
-git clone https://github.com/init-jay/reSpeaker-4mic-hat-led
-cd reSpeaker-4mic-hat-led
+sudo git clone https://github.com/init-jay/reSpeaker-4mic-hat-led /compose/leds
+cd /compose/leds
 docker compose up -d --build
 ```
 
-Under PiCompose, clone it to `/compose/leds` instead and it deploys itself.
-
 That is the whole install. The ring should light up the next time you use the
 wake word.
+
+`/compose/` is where PiCompose looks, so putting it there means it is picked up
+and redeployed like everything else on the Pi. Anywhere else works too if you
+are not using PiCompose.
 
 To watch what it is doing:
 
