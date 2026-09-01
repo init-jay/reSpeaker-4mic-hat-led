@@ -277,6 +277,9 @@ class LedDirector:
 
     async def on_event(self, event: str, data: dict[str, Any]) -> None:
         if event == "light_command":
+            # Proof that HA is reachable, whatever we last inferred from the
+            # connectivity events — this command came from it.
+            self._set_ha_connected(True)
             redraw = self._handle_light_command(data)
             self._refresh()
             if redraw:
@@ -287,13 +290,13 @@ class LedDirector:
 
         if event == "snapshot":
             self._muted = bool(data.get("muted", False))
-            self._ha_connected = bool(data.get("ha_connected", True))
+            self._set_ha_connected(bool(data.get("ha_connected", True)))
         elif event == "muted":
             self._muted = bool(data.get("muted", True))
-        elif event == "connected":
-            self._ha_connected = True
-        elif event == "disconnected":
-            self._ha_connected = False
+        elif event in ("connected", "ha_connected"):
+            self._set_ha_connected(True)
+        elif event in ("disconnected", "ha_disconnected"):
+            self._set_ha_connected(False)
         elif event == "pipeline_error":
             # One-shots must not interrupt the ring while it is being used as
             # a lamp, or while Home Assistant has it switched off.
@@ -322,6 +325,11 @@ class LedDirector:
     async def on_disconnected(self) -> None:
         self._lva_connected = False
         self._refresh()
+
+    def _set_ha_connected(self, connected: bool) -> None:
+        if connected != self._ha_connected:
+            _LOGGER.info("home assistant %s", "reachable" if connected else "unreachable")
+        self._ha_connected = connected
 
     @property
     def _voice_mode(self) -> bool:
