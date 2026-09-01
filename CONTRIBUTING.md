@@ -69,6 +69,16 @@ container already holds the SPI device.
 Stop the container first — two processes writing to `/dev/spidev0.0` and
 GPIO5 will fight.
 
+## Checks
+
+```sh
+uv run python tests/run_all.py
+```
+
+No Pi, ring or LVA needed — see [tests/README.md](tests/README.md) for what
+each one covers. Worth running before and after a change; several of the
+assertions pin down behaviour that looks wrong until you know why.
+
 ## Behaviour worth knowing before changing it
 
 **Animations carry a `min_hold`.** LVA can pass through `thinking` in under a
