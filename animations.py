@@ -39,7 +39,8 @@ Color = tuple[int, int, int]
 RED: Color = (255, 0, 0)
 AMBER: Color = (255, 110, 0)
 BLUE: Color = (40, 120, 255)
-WHITE: Color = (255, 255, 255)
+# Weighted away from pure magenta so it still reads as purple once dimmed.
+PURPLE: Color = (150, 20, 255)
 
 _LOGGER = logging.getLogger("lva-leds.animations")
 
@@ -124,9 +125,10 @@ async def _idle(leds: "APA102") -> None:
 
 
 async def _wake(leds: "APA102") -> None:
-    """Bright flash on the full ring, settling to a steady level."""
-    await _ramp(leds, WHITE, 0.0, 1.0, 0.06)
-    await _ramp(leds, WHITE, 1.0, 0.35, 0.22)
+    """Red flash on the full ring, settling to a steady purple."""
+    await _ramp(leds, RED, 0.0, 1.0, 0.06)
+    await _ramp(leds, RED, 1.0, 0.25, 0.20)
+    await _ramp(leds, PURPLE, 0.25, 0.45, 0.10)
     await _forever()
 
 
@@ -150,7 +152,7 @@ async def _thinking(leds: "APA102") -> None:
 
 async def _speaking(leds: "APA102") -> None:
     """Free-running pulse: nothing tells us how long playback lasts."""
-    await _pulse(leds, WHITE, 0.2, 0.9, period=0.9)
+    await _pulse(leds, PURPLE, 0.2, 0.9, period=0.9)
 
 
 async def _muted(leds: "APA102") -> None:
@@ -209,7 +211,7 @@ def volume(level: float) -> Animation:
     async def run(leds: "APA102") -> None:
         lit = round(max(0.0, min(1.0, level)) * leds.num_leds)
         for index in range(leds.num_leds):
-            leds.set_pixel(index, *(scale(WHITE, 0.6) if index < lit else (0, 0, 0)))
+            leds.set_pixel(index, *(scale(PURPLE, 0.6) if index < lit else (0, 0, 0)))
         leds.show()
         await asyncio.sleep(1.0)
 

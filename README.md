@@ -61,18 +61,18 @@ Trigger the wake word and watch the pipeline events arrive. Ctrl-C to stop.
 ## Phase 3 — animations
 
 The same command drives the ring. `--brightness 1-31` sets the ceiling
-(default 8 — 12 LEDs at full brightness is a lot in a room), `--no-leds` runs
+(default 5 — 12 LEDs at full brightness is a lot in a room), `--no-leds` runs
 log-only on a machine without the hardware.
 
 | State | Ring |
 |---|---|
 | idle | dark, fading out from whatever was showing |
-| wake word | white flash settling to a steady ring |
+| wake word | red flash settling to steady purple |
 | listening | slow blue breath |
 | thinking | blue comet, one turn every 0.9s |
-| speaking | faster white pulse until `tts_finished` |
+| speaking | faster purple pulse until `tts_finished` |
 | muted | solid red |
-| volume changed | white bar, one second |
+| volume changed | purple bar, one second |
 | pipeline error | three red flashes, then back |
 | timer ringing | alternating amber halves |
 | LVA unreachable | red twinkle |

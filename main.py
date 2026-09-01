@@ -346,7 +346,7 @@ def main() -> int:
     parser.add_argument(
         "--brightness",
         type=int,
-        default=8,
+        default=5,
         help="ring brightness ceiling, 1-31 (default: %(default)s)",
     )
     parser.add_argument("--num-leds", type=int, default=12)
