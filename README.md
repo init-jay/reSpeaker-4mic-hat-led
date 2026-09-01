@@ -82,6 +82,27 @@ Every pipeline state is purple and is told apart by movement. Red and amber
 mean something is wrong: red for muted or unreachable LVA, amber for LVA being
 up but unable to reach Home Assistant.
 
+## Phase 4 — Home Assistant light
+
+On connect the ring registers itself as a Light entity (`led_ring`, "LED
+Ring") under the ESPHome device, supporting RGB, brightness and three effects.
+It re-registers on every reconnect, since a restarted LVA has forgotten it.
+
+The entity owns the ring:
+
+| Entity state | Ring |
+|---|---|
+| off | dark; the pipeline does not draw |
+| on, "Voice Assistant" effect | the status animations above (the default) |
+| on, "Rainbow" | hues rotating once every four seconds |
+| on, "Breathe" | slow breath in the chosen colour |
+| on, no effect | solid, in the chosen colour |
+
+So the ring can be used as a small lamp, and the voice animations stay out of
+the way until the effect is switched back. The brightness slider scales within
+the `--brightness` ceiling rather than up to the hardware maximum, so the
+tuning for the room is not undone by turning it up in HA.
+
 ## Development on a non-Pi machine
 
 `gpiozero` is marked `sys_platform == 'linux'`, so `uv sync` works on macOS and

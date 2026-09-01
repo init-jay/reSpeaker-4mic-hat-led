@@ -22,6 +22,7 @@ stand-in on a development machine.
 from __future__ import annotations
 
 import asyncio
+import colorsys
 import logging
 import math
 import random
@@ -194,6 +195,9 @@ async def _error(leds: "APA102") -> None:
 
 
 IDLE = Animation("idle", _idle)
+# Same fade-then-dark as idle, kept separate so logs say which one is meant:
+# idle is "the assistant is resting", off is "Home Assistant turned the light off".
+OFF = Animation("off", _idle)
 WAKE = Animation("wake", _wake, min_hold=0.3)
 LISTENING = Animation("listening", _listening)
 THINKING = Animation("thinking", _thinking, min_hold=0.7)
@@ -216,6 +220,52 @@ def volume(level: float) -> Animation:
         await asyncio.sleep(1.0)
 
     return Animation(f"volume({level:.2f})", run, min_hold=0.5)
+
+
+# --- effects exposed to Home Assistant --------------------------------------
+#
+# These are driven by light_command rather than by the voice pipeline, so they
+# take their colour and level from whatever HA asked for.
+
+
+def solid(color: Color, level: float = 1.0) -> Animation:
+    """Hold one colour — what the light does with no effect selected."""
+
+    async def run(leds: "APA102") -> None:
+        leds.fill(*scale(color, level))
+        leds.show()
+        await _forever()
+
+    return Animation(f"solid{color}", run)
+
+
+def breathe(color: Color, level: float = 1.0) -> Animation:
+    """Slow breath in the chosen colour."""
+
+    async def run(leds: "APA102") -> None:
+        await _pulse(leds, color, 0.08 * level, level, period=4.0)
+
+    return Animation(f"breathe{color}", run)
+
+
+def rainbow(level: float = 1.0) -> Animation:
+    """Hues spread around the ring, rotating once every four seconds."""
+
+    async def run(leds: "APA102") -> None:
+        offset = 0.0
+        while True:
+            for index in range(leds.num_leds):
+                hue = ((index / leds.num_leds) + offset) % 1.0
+                red, green, blue = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+                leds.set_pixel(
+                    index,
+                    *scale((int(red * 255), int(green * 255), int(blue * 255)), level),
+                )
+            leds.show()
+            offset = (offset + FRAME / 4.0) % 1.0
+            await asyncio.sleep(FRAME)
+
+    return Animation("rainbow", run)
 
 
 class AnimationRunner:

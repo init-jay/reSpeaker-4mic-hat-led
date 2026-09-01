@@ -121,10 +121,10 @@ Exit criteria: LEDs track a full voice interaction end to end.
 
 ### Phase 4 — HA Light entity
 
-- [ ] Send `register_light` on connect:
+- [x] Send `register_light` on connect:
       `{"name": ..., "object_id": ..., "effects": [...], "supports_rgb": true, "supports_brightness": true}`
-- [ ] Handle `light_command`, matching on `object_id`
-- [ ] Declare a `"Voice Assistant"` effect that runs the pipeline animations,
+- [x] Handle `light_command`, matching on `object_id`
+- [x] Declare a `"Voice Assistant"` effect that runs the pipeline animations,
       plus any static effects worth exposing
 - [ ] Confirm the entity appears in HA under the ESPHome device
 

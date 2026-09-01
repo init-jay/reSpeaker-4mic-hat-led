@@ -178,15 +178,51 @@ class PeripheralClient:
                 _LOGGER.exception("handler failed for event %r", event)
 
 
-class LedDirector:
-    """Maps peripheral events onto ring animations.
+def _as_bool(value: Any, default: bool = True) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ("on", "true", "1", "yes")
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return default
 
-    Pipeline state is only what shows when nothing more important is wrong.
-    Priority, highest first: our socket to LVA is down, muted, LVA cannot reach
-    Home Assistant, then the pipeline itself. The two connectivity faults are
-    genuinely different — LVA being gone is not the same as LVA being up but
-    unable to reach HA — so they get different animations.
+
+def _as_byte(value: Any, default: int) -> int:
+    """Read a colour or brightness channel as 0-255.
+
+    ESPHome carries these as 0.0-1.0 floats internally but the peripheral API
+    is JSON, so it could be either. A float that fits in 0.0-1.0 is treated as
+    normalised; anything else is taken as already being 0-255.
     """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return default
+    if isinstance(value, float) and 0.0 <= value <= 1.0:
+        return round(value * 255)
+    return max(0, min(255, int(value)))
+
+
+class LedDirector:
+    """Maps peripheral events and Home Assistant light commands onto animations.
+
+    The registered Light entity owns the ring:
+
+    * off — dark, and nothing else draws
+    * on with the "Voice Assistant" effect — the pipeline behaviour below
+    * on with any other effect — that effect, pipeline suppressed
+
+    Within the voice effect, pipeline state is only what shows when nothing
+    more important is wrong. Priority, highest first: our socket to LVA is
+    down, muted, LVA cannot reach Home Assistant, then the pipeline itself.
+    The two connectivity faults are genuinely different — LVA being gone is not
+    the same as LVA being up but unable to reach HA — so they animate
+    differently.
+    """
+
+    LIGHT_NAME = "LED Ring"
+    LIGHT_OBJECT_ID = "led_ring"
+    VOICE_EFFECT = "Voice Assistant"
+    EFFECTS = (VOICE_EFFECT, "Rainbow", "Breathe")
 
     _PIPELINE = {
         "wake_word_detected": animations.WAKE,
@@ -201,14 +237,50 @@ class LedDirector:
     # carries the fade. stt_text/tts_text are text only, nothing to show.
     _IGNORED = {"tts_finished", "stt_text", "tts_text"}
 
-    def __init__(self, runner: animations.AnimationRunner) -> None:
+    def __init__(
+        self,
+        runner: animations.AnimationRunner,
+        *,
+        leds: Optional[Any] = None,
+        max_brightness: int = 31,
+    ) -> None:
         self._runner = runner
+        self._leds = leds
+        self._max_brightness = max_brightness
+
         self._pipeline = animations.IDLE
         self._muted = False
         self._ha_connected = True
         self._lva_connected = True
 
+        # Default to on and showing the pipeline, so the ring works before
+        # Home Assistant has ever touched it.
+        self._light_on = True
+        self._light_effect = self.VOICE_EFFECT
+        self._light_color: animations.Color = (255, 255, 255)
+        self._light_level = 1.0
+        # Rebuilt only when a light_command changes it: the runner compares
+        # animations by identity, so handing it a fresh object every refresh
+        # would restart the effect continuously.
+        self._effect_animation = animations.solid(self._light_color)
+
+    @property
+    def registration(self) -> dict[str, Any]:
+        """The ``register_light`` payload for this ring."""
+        return {
+            "name": self.LIGHT_NAME,
+            "object_id": self.LIGHT_OBJECT_ID,
+            "effects": list(self.EFFECTS),
+            "supports_rgb": True,
+            "supports_brightness": True,
+        }
+
     async def on_event(self, event: str, data: dict[str, Any]) -> None:
+        if event == "light_command":
+            self._handle_light_command(data)
+            self._refresh()
+            return
+
         if event == "snapshot":
             self._muted = bool(data.get("muted", False))
             self._ha_connected = bool(data.get("ha_connected", True))
@@ -219,11 +291,14 @@ class LedDirector:
         elif event == "disconnected":
             self._ha_connected = False
         elif event == "pipeline_error":
-            self._runner.flash(animations.ERROR)
+            # One-shots must not interrupt the ring while it is being used as
+            # a lamp, or while Home Assistant has it switched off.
+            if self._voice_mode:
+                self._runner.flash(animations.ERROR)
             return
         elif event == "volume_changed":
             volume = data.get("volume")
-            if isinstance(volume, (int, float)):
+            if self._voice_mode and isinstance(volume, (int, float)):
                 self._runner.flash(animations.volume(float(volume)))
             return
         elif event in self._IGNORED:
@@ -244,7 +319,67 @@ class LedDirector:
         self._lva_connected = False
         self._refresh()
 
+    @property
+    def _voice_mode(self) -> bool:
+        """True when the ring is acting as the assistant's status display."""
+        return self._light_on and self._light_effect == self.VOICE_EFFECT
+
+    def _handle_light_command(self, data: dict[str, Any]) -> None:
+        if data.get("object_id") not in (None, self.LIGHT_OBJECT_ID):
+            return  # meant for some other peripheral's entity
+
+        if "state" in data:
+            self._light_on = _as_bool(data["state"])
+
+        if any(channel in data for channel in ("red", "green", "blue")):
+            self._light_color = (
+                _as_byte(data.get("red"), self._light_color[0]),
+                _as_byte(data.get("green"), self._light_color[1]),
+                _as_byte(data.get("blue"), self._light_color[2]),
+            )
+
+        if "brightness" in data:
+            self._light_level = _as_byte(data["brightness"], 255) / 255
+            if self._leds is not None:
+                # Scale within the ceiling the ring was opened with rather than
+                # up to 31, so the room tuning survives the HA slider.
+                self._leds.global_brightness = max(
+                    1, round(self._light_level * self._max_brightness)
+                )
+
+        if "effect" in data:
+            requested = str(data["effect"] or "").strip()
+            match = {e.lower(): e for e in self.EFFECTS}.get(requested.lower())
+            # "None" is ESPHome's no-effect selection; anything unrecognised
+            # is treated the same way rather than left in a stale effect.
+            self._light_effect = match or ""
+            if match is None and requested.lower() not in ("", "none"):
+                _LOGGER.warning("unknown effect %r, falling back to solid", requested)
+
+        self._effect_animation = self._build_effect()
+        _LOGGER.info(
+            "light: %s effect=%r rgb=%s",
+            "on" if self._light_on else "off",
+            self._light_effect or "none",
+            self._light_color,
+        )
+
+    def _build_effect(self) -> animations.Animation:
+        if self._light_effect == "Rainbow":
+            return animations.rainbow(1.0)
+        if self._light_effect == "Breathe":
+            return animations.breathe(self._light_color)
+        return animations.solid(self._light_color)
+
     def _refresh(self) -> None:
+        if not self._light_on:
+            self._runner.set_state(animations.OFF)
+            return
+
+        if not self._voice_mode:
+            self._runner.set_state(self._effect_animation)
+            return
+
         if not self._lva_connected:
             state = animations.LVA_DOWN
         elif self._muted:
@@ -289,7 +424,7 @@ async def _amain(args: argparse.Namespace) -> int:
 
         leds = APA102(args.num_leds, global_brightness=args.brightness)
         runner = animations.AnimationRunner(leds)
-        director = LedDirector(runner)
+        director = LedDirector(runner, leds=leds, max_brightness=args.brightness)
 
     async def on_event(event: str, data: dict[str, Any]) -> None:
         if event == "snapshot":
@@ -300,8 +435,12 @@ async def _amain(args: argparse.Namespace) -> int:
             await director.on_event(event, data)
 
     async def on_connected() -> None:
-        if director is not None:
-            await director.on_connected()
+        if director is None:
+            return
+        await director.on_connected()
+        # Re-registered on every connect: if LVA restarted it has forgotten us.
+        if await client.send_command("register_light", director.registration):
+            _LOGGER.info("registered light %r", director.LIGHT_OBJECT_ID)
 
     async def on_disconnected() -> None:
         _LOGGER.warning("disconnected from LVA")
