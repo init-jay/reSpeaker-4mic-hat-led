@@ -127,6 +127,21 @@ Assistant. It keeps retrying, so this clears by itself once LVA is back.
 **Amber twinkle.** LVA is running but cannot reach Home Assistant. Look at
 LVA, not at this.
 
+## The upstream example
+
+Linux Voice Assistant ships
+[its own controller for this HAT](https://github.com/OHF-Voice/linux-voice-assistant/tree/main/examples/ReSpeaker%204mic%20HAT),
+which covers much the same ground and does some things this does not: it
+mirrors the Home Assistant Voice PE animations closely, maps user-wired GPIO
+buttons to LVA commands, and handles the timer and `volume_muted` events.
+
+We differs in mainly in visual choice. Upstream's light entity defaults off and only gates an idle glow, so the voice animations always run; here, off means off. Its
+animations use hardcoded colours per state, where this repo uses one colour with states told apart by movement.
+
+Upstream also doesn't appear to drive GPIO5, which gates power to the
+ring on this board. In my testing, with GPIO5 left alone the LEDs stay dark
+through a full test sequence while SPI transmits normally. Your mileage may vary, maybe there are different board revisions.
+
 ## Development
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for running from source, the hardware
