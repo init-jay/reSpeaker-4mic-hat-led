@@ -303,6 +303,17 @@ class AnimationRunner:
         self._transient = animation
         self._request()
 
+    def restart(self) -> None:
+        """Redraw the current animation from the top.
+
+        Static states draw one frame and then park, so a change to the ring's
+        brightness ceiling would not show until the state next changed. This
+        forces the frame to be drawn again.
+        """
+        # Clearing _current is what makes _apply see a difference and switch.
+        self._current = None
+        self._request()
+
     def _request(self) -> None:
         if self._closed:
             return

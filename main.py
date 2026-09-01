@@ -277,8 +277,12 @@ class LedDirector:
 
     async def on_event(self, event: str, data: dict[str, Any]) -> None:
         if event == "light_command":
-            self._handle_light_command(data)
+            redraw = self._handle_light_command(data)
             self._refresh()
+            if redraw:
+                # A static state has already drawn its only frame, so the new
+                # brightness would not appear until the state next changed.
+                self._runner.restart()
             return
 
         if event == "snapshot":
@@ -324,9 +328,10 @@ class LedDirector:
         """True when the ring is acting as the assistant's status display."""
         return self._light_on and self._light_effect == self.VOICE_EFFECT
 
-    def _handle_light_command(self, data: dict[str, Any]) -> None:
+    def _handle_light_command(self, data: dict[str, Any]) -> bool:
+        """Apply a light command. Returns True if the ring needs redrawing."""
         if data.get("object_id") not in (None, self.LIGHT_OBJECT_ID):
-            return  # meant for some other peripheral's entity
+            return False  # meant for some other peripheral's entity
 
         if "state" in data:
             self._light_on = _as_bool(data["state"])
@@ -338,7 +343,9 @@ class LedDirector:
                 _as_byte(data.get("blue"), self._light_color[2]),
             )
 
+        redraw = False
         if "brightness" in data:
+            redraw = True
             self._light_level = _as_byte(data["brightness"], 255) / 255
             if self._leds is not None:
                 # Scale within the ceiling the ring was opened with rather than
@@ -358,11 +365,15 @@ class LedDirector:
 
         self._effect_animation = self._build_effect()
         _LOGGER.info(
-            "light: %s effect=%r rgb=%s",
+            "light: %s effect=%r rgb=%s level=%.2f",
             "on" if self._light_on else "off",
             self._light_effect or "none",
             self._light_color,
+            self._light_level,
         )
+        # Only the voice states park after one frame; an effect animation is a
+        # fresh object here, so _refresh restarts it on its own.
+        return redraw and self._voice_mode
 
     def _build_effect(self) -> animations.Animation:
         if self._light_effect == "Rainbow":
