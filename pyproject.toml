@@ -1,0 +1,19 @@
+[project]
+name = "lva-leds"
+version = "0.1.0"
+description = "APA102 LED peripheral for Linux Voice Assistant on the ReSpeaker 4-Mic Array"
+requires-python = ">=3.11"
+dependencies = [
+    # Hardware access only exists on the Pi; the markers keep `uv sync` working
+    # on a development machine, where spidev will not even build.
+    "spidev>=3.6 ; sys_platform == 'linux'",
+    "gpiozero>=2.0 ; sys_platform == 'linux'",
+    # gpiozero needs a pin factory; lgpio is the working backend on current
+    # Raspberry Pi OS kernels (RPi.GPIO is unmaintained and does not work here).
+    "lgpio>=0.2.2 ; sys_platform == 'linux'",
+    # Phase 2 onwards.
+    "websockets>=13",
+]
+
+[tool.uv]
+package = false

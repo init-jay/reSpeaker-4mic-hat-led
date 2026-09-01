@@ -71,9 +71,9 @@ names are the ones we declare at registration.
 
 Prove the hardware before involving LVA at all.
 
-- [ ] Write `apa102.py`: SPI init, GPIO5 enable, `set_pixel`, `show`, `clear`
-- [ ] Source the APA102 logic from wyoming-satellite `examples/4mic_leds.py`
-- [ ] Test script: cycle all 12 LEDs through red, green, blue, off
+- [x] Write `apa102.py`: SPI init, GPIO5 enable, `set_pixel`, `show`, `clear`
+- [x] Source the APA102 logic from wyoming-satellite `examples/4mic_leds.py`
+- [x] Test script: cycle all 12 LEDs through red, green, blue, off
 - [ ] Confirm brightness control works and there's no flicker
 
 Exit criteria: LEDs respond to a script run directly on the host.
@@ -134,11 +134,12 @@ auto-deploys anything under `/compose/`. Needs:
 
 ```
 lva-leds/
-├── plan.md
+├── PLAN.md
 ├── apa102.py           # SPI + GPIO5, low-level LED control
+├── test_leds.py        # Phase 1 hardware check
 ├── animations.py       # named animations, cancellable
 ├── main.py             # websocket client, event dispatch
-├── requirements.txt    # websockets, spidev, gpiozero (or RPi.GPIO)
+├── pyproject.toml      # uv project: websockets, spidev, gpiozero, lgpio
 ├── docker-compose.yml
 └── Dockerfile
 ```
