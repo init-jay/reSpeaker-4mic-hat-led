@@ -39,6 +39,8 @@ Color = tuple[int, int, int]
 
 RED: Color = (255, 0, 0)
 AMBER: Color = (255, 110, 0)
+GREEN: Color = (0, 255, 40)
+YELLOW: Color = (255, 170, 0)
 # Weighted away from pure magenta so it still reads as purple once dimmed.
 # Every pipeline state uses it; they are told apart by movement, not colour.
 # Red and amber are reserved for faults.

@@ -93,29 +93,25 @@ The entity owns the ring:
 | Entity state | Ring |
 |---|---|
 | off | dark; the pipeline does not draw |
-| on, "Voice Assistant" effect | the status animations above (the default) |
+| on, "Voice Assistant" | the status animations above, in purple (the default) |
+| on, "Green" / "Red" / "Yellow" | the same, in that colour |
 | on, "Rainbow" | hues rotating once every four seconds |
-| on, "Breathe" | slow breath in the chosen colour |
-| on, no effect | solid, in the chosen colour |
+| on, "Breathe" | slow breath in the colour last chosen |
+| on, no effect | solid, in the colour last chosen |
 
-So the ring can be used as a small lamp, and the voice animations stay out of
-the way until the effect is switched back.
+The first four run the voice pipeline; the last three turn the ring into a
+lamp, with the voice animations staying out of the way until a colour is
+picked again.
 
-The colour picker sets the colour of the pipeline animations too, so the
-status ring is whatever colour you choose — purple until you change it. Faults
-keep their own colours, since a red twinkle that could be recoloured green
-would not be much of a warning.
+The colour comes from the effect list because HA's colour wheel is not usable
+for this entity, so `supports_rgb` is false and no wheel is offered. Faults
+keep their own colours whatever is selected — a warning you can recolour is
+not a warning. Note that choosing Red or Yellow puts the pipeline close to the
+fault colours, which are then told apart only by movement.
 
 Brightness from HA is applied to the colour values rather than the APA102's
 brightness field, which has only 31 steps — too few to dim smoothly.
 `--brightness` stays fixed as the hardware ceiling for the room.
-
-LVA folds a colour's magnitude into `brightness`, so a drag on the HA colour
-wheel arrives as a colour change *and* a brightness change together. Honouring
-both makes the ring lurch between levels while you are trying to judge a hue,
-so a brightness that arrives alongside a colour change is ignored. The
-brightness slider and any dimming automation send brightness on its own and
-work as expected.
 
 ## Development on a non-Pi machine
 

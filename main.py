@@ -222,7 +222,17 @@ class LedDirector:
     LIGHT_NAME = "LED Ring"
     LIGHT_OBJECT_ID = "led_ring"
     VOICE_EFFECT = "Voice Assistant"
-    EFFECTS = (VOICE_EFFECT, "Rainbow", "Breathe")
+
+    # The colour wheel is unusable for this entity, so the ring's colour is
+    # chosen from the effect list instead. These effects all run the voice
+    # pipeline; the ones below them turn the ring into a lamp.
+    VOICE_COLOURS = {
+        VOICE_EFFECT: animations.PURPLE,
+        "Green": animations.GREEN,
+        "Red": animations.RED,
+        "Yellow": animations.YELLOW,
+    }
+    EFFECTS = tuple(VOICE_COLOURS) + ("Rainbow", "Breathe")
 
     # Event -> key into the pipeline animations, which are rebuilt whenever the
     # light's colour changes.
@@ -253,9 +263,6 @@ class LedDirector:
         self._light_effect = self.VOICE_EFFECT
         self._light_color: animations.Color = animations.PURPLE
         self._light_level = 1.0
-        # The first command from HA is a full state sync, so both its colour
-        # and its brightness are taken; after that they are decoupled.
-        self._seen_light_command = False
         # Both are rebuilt only when a light_command changes them: the runner
         # compares animations by identity, so handing it fresh objects on every
         # refresh would restart whatever is playing, continuously.
@@ -269,7 +276,8 @@ class LedDirector:
             "name": self.LIGHT_NAME,
             "object_id": self.LIGHT_OBJECT_ID,
             "effects": list(self.EFFECTS),
-            "supports_rgb": True,
+            # The colour comes from the effect list, so no colour wheel.
+            "supports_rgb": False,
             "supports_brightness": True,
         }
 
@@ -333,7 +341,7 @@ class LedDirector:
     @property
     def _voice_mode(self) -> bool:
         """True when the ring is acting as the assistant's status display."""
-        return self._light_on and self._light_effect == self.VOICE_EFFECT
+        return self._light_on and self._light_effect in self.VOICE_COLOURS
 
     def _handle_light_command(self, data: dict[str, Any]) -> None:
         if data.get("object_id") not in (None, self.LIGHT_OBJECT_ID):
@@ -343,39 +351,13 @@ class LedDirector:
             self._light_on = _as_bool(data["state"])
 
         recolour = False
-        if any(channel in data for channel in ("red", "green", "blue")):
-            colour = (
-                _as_byte(data.get("red"), self._light_color[0]),
-                _as_byte(data.get("green"), self._light_color[1]),
-                _as_byte(data.get("blue"), self._light_color[2]),
-            )
-            # An all-black colour would leave the ring dark with the light
-            # still nominally on; HA sends it while dragging the picker.
-            if any(colour) and colour != self._light_color:
-                self._light_color = colour
-                recolour = True
-
         if "brightness" in data:
             # Applied to the RGB values, not to the APA102's 5-bit brightness
             # field, which has far too few steps to dim smoothly.
-            #
-            # Deliberately ignored when the same command also changed the
-            # colour. LVA folds a colour's magnitude into brightness, so a drag
-            # on the HA colour wheel arrives as a colour *and* a brightness
-            # change, and honouring both means the ring's level lurches around
-            # while you are trying to pick a hue. The brightness slider and any
-            # dimming automation send brightness on its own, which still works.
             level = _as_byte(data["brightness"], 255) / 255
-            changed = abs(level - self._light_level) > 1 / 512
-            if changed and (not recolour or not self._seen_light_command):
+            if abs(level - self._light_level) > 1 / 512:
                 self._light_level = level
                 recolour = True
-            elif changed:
-                _LOGGER.debug(
-                    "ignoring brightness %.2f sent with a colour change", level
-                )
-
-        self._seen_light_command = True
 
         if "effect" in data:
             requested = str(data["effect"] or "").strip()
@@ -385,6 +367,13 @@ class LedDirector:
             self._light_effect = match or ""
             if match is None and requested.lower() not in ("", "none"):
                 _LOGGER.warning("unknown effect %r, falling back to solid", requested)
+
+            # A voice effect names the ring's colour. The lamp effects keep
+            # whichever colour was last chosen.
+            colour = self.VOICE_COLOURS.get(self._light_effect)
+            if colour is not None and colour != self._light_color:
+                self._light_color = colour
+                recolour = True
 
         self._effect_animation = self._build_effect()
         if recolour:
