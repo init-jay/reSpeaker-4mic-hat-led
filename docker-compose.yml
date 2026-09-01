@@ -11,8 +11,10 @@ services:
     devices:
       # The LED ring.
       - /dev/spidev0.0:/dev/spidev0.0
-      # GPIO5, which gates power to the ring. lgpio uses the character device,
-      # not the older /dev/gpiomem. On a Pi 5 this is a different chip number.
+      # GPIO5, which gates power to the ring. gpiozero's native pin factory
+      # maps /dev/gpiomem; gpiochip0 is here so the lgpio factory also works if
+      # the image ever gains it. Both exist on a Pi 3 — a Pi 5 differs.
+      - /dev/gpiomem:/dev/gpiomem
       - /dev/gpiochip0:/dev/gpiochip0
 
     command: ["--brightness", "5"]

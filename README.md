@@ -127,20 +127,25 @@ docker compose up -d --build
 docker compose logs -f
 ```
 
-The image installs `python3-lgpio`, `python3-spidev`, `python3-gpiozero` and
-`python3-websockets` from apt, so there is no compiler and no pip in it — the
-same reasoning as the host setup above. `python3-lgpio` is a Raspberry Pi OS
-package rather than a Debian one, so the Dockerfile adds the Raspberry Pi
-archive that the host already uses; everything else comes from Debian.
+The image installs `python3-spidev`, `python3-gpiozero` and
+`python3-websockets` from Debian, so there is no compiler and no pip in it —
+the same reasoning as the host setup above.
+
+It does not use `lgpio`, which the host does. That package is Raspberry Pi
+OS's rather than Debian's, and pulling in that archive means trusting a
+signing key whose self-signature is SHA1 — rejected outright by trixie's
+verifier since February 2026. Holding one pin high does not justify weakening
+signature checking, so the container uses gpiozero's own `native` pin factory,
+which is pure Python and maps `/dev/gpiomem`.
 
 It needs three things from the host, all in `docker-compose.yml`:
 
 - `network_mode: host`, because LVA runs that way and its peripheral API is
   only on the host's own localhost
 - `/dev/spidev0.0`, the ring
-- `/dev/gpiochip0`, for GPIO5 which gates power to the ring. lgpio uses the
-  character device rather than the older `/dev/gpiomem`, so `privileged: true`
-  is not needed
+- `/dev/gpiomem`, for GPIO5 which gates power to the ring — `privileged: true`
+  is not needed. `/dev/gpiochip0` is mapped too, so switching pin factories
+  later needs no compose change
 
 There is deliberately no `depends_on`: LVA is a separate compose project, and
 the reconnect loop copes with it being absent or restarting.

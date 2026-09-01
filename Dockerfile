@@ -1,33 +1,25 @@
-# Everything comes from apt as a prebuilt package: lgpio and spidev both build
-# C from PyPI, and lgpio additionally wants SWIG and the lgpio C library, which
-# is a lot of toolchain to carry into an image for one GPIO pin and one SPI
-# device. Nothing here needs a compiler.
+# Everything comes from Debian as a prebuilt package, so the image carries no
+# compiler and no pip.
+#
+# Note what is *not* here: lgpio, the pin factory used on the host. It is a
+# Raspberry Pi OS package rather than a Debian one, and adding that archive
+# means trusting a key whose self-signature is SHA1, which trixie's verifier
+# rejects outright. Since all we need from GPIO is to hold one pin high,
+# gpiozero's own native factory does the job with no dependency at all.
 FROM debian:trixie-slim
 
-# python3-lgpio is a Raspberry Pi OS package, not a Debian one, so the archive
-# the host already uses has to be added here as well. Everything else comes
-# from Debian proper.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
-    && curl -fsSL https://archive.raspberrypi.com/debian/raspberrypi.gpg.key \
-        | gpg --dearmor -o /usr/share/keyrings/raspberrypi.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/raspberrypi.gpg]" \
-        "http://archive.raspberrypi.com/debian/ trixie main" \
-        > /etc/apt/sources.list.d/raspi.list \
-    && apt-get update \
     && apt-get install -y --no-install-recommends \
         python3 \
         python3-gpiozero \
-        python3-lgpio \
         python3-spidev \
         python3-websockets \
-    && apt-get purge -y curl gnupg \
-    && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
-# lgpio is the working pin factory on current Raspberry Pi kernels; naming it
-# explicitly stops gpiozero probing for others and failing noisily first.
-ENV GPIOZERO_PIN_FACTORY=lgpio \
+# The native factory is pure Python and drives the pins by mapping
+# /dev/gpiomem, so it needs that device rather than /dev/gpiochip0. Naming it
+# explicitly stops gpiozero probing for lgpio and friends first.
+ENV GPIOZERO_PIN_FACTORY=native \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
