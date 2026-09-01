@@ -224,13 +224,15 @@ class LedDirector:
     VOICE_EFFECT = "Voice Assistant"
     EFFECTS = (VOICE_EFFECT, "Rainbow", "Breathe")
 
+    # Event -> key into the pipeline animations, which are rebuilt whenever the
+    # light's colour changes.
     _PIPELINE = {
-        "wake_word_detected": animations.WAKE,
-        "listening": animations.LISTENING,
-        "thinking": animations.THINKING,
-        "tts_speaking": animations.SPEAKING,
-        "idle": animations.IDLE,
-        "timer_ringing": animations.TIMER,
+        "wake_word_detected": "wake",
+        "listening": "listening",
+        "thinking": "thinking",
+        "tts_speaking": "speaking",
+        "idle": "idle",
+        "timer_ringing": "timer",
     }
 
     # tts_finished is deliberately absent: idle follows it immediately and
@@ -248,7 +250,7 @@ class LedDirector:
         self._leds = leds
         self._max_brightness = max_brightness
 
-        self._pipeline = animations.IDLE
+        self._pipeline_key = "idle"
         self._muted = False
         self._ha_connected = True
         self._lva_connected = True
@@ -257,12 +259,13 @@ class LedDirector:
         # Home Assistant has ever touched it.
         self._light_on = True
         self._light_effect = self.VOICE_EFFECT
-        self._light_color: animations.Color = (255, 255, 255)
+        self._light_color: animations.Color = animations.PURPLE
         self._light_level = 1.0
-        # Rebuilt only when a light_command changes it: the runner compares
-        # animations by identity, so handing it a fresh object every refresh
-        # would restart the effect continuously.
+        # Both are rebuilt only when a light_command changes them: the runner
+        # compares animations by identity, so handing it fresh objects on every
+        # refresh would restart whatever is playing, continuously.
         self._effect_animation = animations.solid(self._light_color)
+        self._pipeline_animations = self._build_pipeline()
 
     @property
     def registration(self) -> dict[str, Any]:
@@ -306,12 +309,12 @@ class LedDirector:
         elif event == "volume_changed":
             volume = data.get("volume")
             if self._voice_mode and isinstance(volume, (int, float)):
-                self._runner.flash(animations.volume(float(volume)))
+                self._runner.flash(animations.volume(float(volume), self._light_color))
             return
         elif event in self._IGNORED:
             return
         elif event in self._PIPELINE:
-            self._pipeline = self._PIPELINE[event]
+            self._pipeline_key = self._PIPELINE[event]
         else:
             _LOGGER.debug("no animation for event %r", event)
             return
@@ -344,12 +347,18 @@ class LedDirector:
         if "state" in data:
             self._light_on = _as_bool(data["state"])
 
+        recolour = False
         if any(channel in data for channel in ("red", "green", "blue")):
-            self._light_color = (
+            colour = (
                 _as_byte(data.get("red"), self._light_color[0]),
                 _as_byte(data.get("green"), self._light_color[1]),
                 _as_byte(data.get("blue"), self._light_color[2]),
             )
+            # An all-black colour would leave the ring dark with the light
+            # still nominally on; HA sends it while dragging the picker.
+            if any(colour) and colour != self._light_color:
+                self._light_color = colour
+                recolour = True
 
         redraw = False
         if "brightness" in data:
@@ -372,6 +381,10 @@ class LedDirector:
                 _LOGGER.warning("unknown effect %r, falling back to solid", requested)
 
         self._effect_animation = self._build_effect()
+        if recolour:
+            # New objects, so _refresh swaps the running animation for the
+            # recoloured one by itself.
+            self._pipeline_animations = self._build_pipeline()
         _LOGGER.info(
             "light: %s effect=%r rgb=%s level=%.2f",
             "on" if self._light_on else "off",
@@ -382,6 +395,18 @@ class LedDirector:
         # Only the voice states park after one frame; an effect animation is a
         # fresh object here, so _refresh restarts it on its own.
         return redraw and self._voice_mode
+
+    def _build_pipeline(self) -> dict[str, animations.Animation]:
+        """The pipeline animations in the light's current colour."""
+        colour = self._light_color
+        return {
+            "wake": animations.wake(colour),
+            "listening": animations.listening(colour),
+            "thinking": animations.thinking(colour),
+            "speaking": animations.speaking(colour),
+            "idle": animations.IDLE,
+            "timer": animations.TIMER,
+        }
 
     def _build_effect(self) -> animations.Animation:
         if self._light_effect == "Rainbow":
@@ -406,7 +431,7 @@ class LedDirector:
         elif not self._ha_connected:
             state = animations.HA_DOWN
         else:
-            state = self._pipeline
+            state = self._pipeline_animations[self._pipeline_key]
 
         self._runner.set_state(state)
 

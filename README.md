@@ -99,9 +99,16 @@ The entity owns the ring:
 | on, no effect | solid, in the chosen colour |
 
 So the ring can be used as a small lamp, and the voice animations stay out of
-the way until the effect is switched back. The brightness slider scales within
-the `--brightness` ceiling rather than up to the hardware maximum, so the
-tuning for the room is not undone by turning it up in HA.
+the way until the effect is switched back.
+
+The colour picker sets the colour of the pipeline animations too, so the
+status ring is whatever colour you choose — purple until you change it. Faults
+keep their own colours, since a red twinkle that could be recoloured green
+would not be much of a warning.
+
+The brightness slider scales within the `--brightness` ceiling rather than up
+to the hardware maximum, so the tuning for the room is not undone by turning
+it up in HA.
 
 ## Development on a non-Pi machine
 

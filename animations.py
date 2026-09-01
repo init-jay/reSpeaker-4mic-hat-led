@@ -126,34 +126,53 @@ async def _idle(leds: "APA102") -> None:
     await _forever()
 
 
-async def _wake(leds: "APA102") -> None:
-    """Bright purple flash on the full ring, settling to a steady level."""
-    await _ramp(leds, PURPLE, 0.0, 1.0, 0.06)
-    await _ramp(leds, PURPLE, 1.0, 0.45, 0.24)
-    await _forever()
+# The pipeline animations take their colour from the Home Assistant light, so
+# that its colour picker controls the ring. Faults below keep their own colours.
 
 
-async def _listening(leds: "APA102") -> None:
-    await _pulse(leds, PURPLE, 0.15, 0.65, period=2.5)
+def wake(color: Color = PURPLE) -> Animation:
+    """Bright flash on the full ring, settling to a steady level."""
+
+    async def run(leds: "APA102") -> None:
+        await _ramp(leds, color, 0.0, 1.0, 0.06)
+        await _ramp(leds, color, 1.0, 0.45, 0.24)
+        await _forever()
+
+    return Animation("wake", run, min_hold=0.3)
 
 
-async def _thinking(leds: "APA102") -> None:
+def listening(color: Color = PURPLE) -> Animation:
+    async def run(leds: "APA102") -> None:
+        await _pulse(leds, color, 0.15, 0.65, period=2.5)
+
+    return Animation("listening", run)
+
+
+def thinking(color: Color = PURPLE) -> Animation:
     """A comet with a fading tail, one revolution every 0.9s."""
-    tail = 0.55
-    position = 0.0
-    while True:
-        head = int(position) % leds.num_leds
-        for index in range(leds.num_leds):
-            distance = (head - index) % leds.num_leds
-            leds.set_pixel(index, *scale(PURPLE, tail**distance))
-        leds.show()
-        position += leds.num_leds * FRAME / 0.9
-        await asyncio.sleep(FRAME)
+
+    async def run(leds: "APA102") -> None:
+        tail = 0.55
+        position = 0.0
+        while True:
+            head = int(position) % leds.num_leds
+            for index in range(leds.num_leds):
+                distance = (head - index) % leds.num_leds
+                leds.set_pixel(index, *scale(color, tail**distance))
+            leds.show()
+            position += leds.num_leds * FRAME / 0.9
+            await asyncio.sleep(FRAME)
+
+    return Animation("thinking", run, min_hold=0.7)
 
 
-async def _speaking(leds: "APA102") -> None:
+def speaking(color: Color = PURPLE) -> Animation:
     """Free-running pulse: nothing tells us how long playback lasts."""
-    await _pulse(leds, PURPLE, 0.2, 0.9, period=0.9)
+
+    async def run(leds: "APA102") -> None:
+        await _pulse(leds, color, 0.2, 0.9, period=0.9)
+
+    return Animation("speaking", run)
 
 
 async def _muted(leds: "APA102") -> None:
@@ -198,10 +217,6 @@ IDLE = Animation("idle", _idle)
 # Same fade-then-dark as idle, kept separate so logs say which one is meant:
 # idle is "the assistant is resting", off is "Home Assistant turned the light off".
 OFF = Animation("off", _idle)
-WAKE = Animation("wake", _wake, min_hold=0.3)
-LISTENING = Animation("listening", _listening)
-THINKING = Animation("thinking", _thinking, min_hold=0.7)
-SPEAKING = Animation("speaking", _speaking)
 MUTED = Animation("muted", _muted)
 LVA_DOWN = Animation("lva_down", _lva_down)
 HA_DOWN = Animation("ha_down", _ha_down)
@@ -209,13 +224,13 @@ TIMER = Animation("timer", _timer)
 ERROR = Animation("error", _error, min_hold=0.75)
 
 
-def volume(level: float) -> Animation:
+def volume(level: float, color: Color = PURPLE) -> Animation:
     """A one-shot bar showing ``level`` (0.0-1.0) around the ring."""
 
     async def run(leds: "APA102") -> None:
         lit = round(max(0.0, min(1.0, level)) * leds.num_leds)
         for index in range(leds.num_leds):
-            leds.set_pixel(index, *(scale(PURPLE, 0.6) if index < lit else (0, 0, 0)))
+            leds.set_pixel(index, *(scale(color, 0.6) if index < lit else (0, 0, 0)))
         leds.show()
         await asyncio.sleep(1.0)
 
