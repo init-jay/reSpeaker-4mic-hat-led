@@ -106,13 +106,16 @@ status ring is whatever colour you choose — purple until you change it. Faults
 keep their own colours, since a red twinkle that could be recoloured green
 would not be much of a warning.
 
-Brightness from HA is applied to the colour values, not to the APA102's
-brightness field, which has only 31 steps. That matters more than it sounds:
-LVA normalises colour so the largest channel is always 1.0 and folds the
-intensity into `brightness`, so *every* colour change carries a brightness
-change with it. Through the 5-bit field those landed as a handful of coarse
-jumps, which made choosing a colour a fight. `--brightness` stays fixed as the
-hardware ceiling for the room.
+Brightness from HA is applied to the colour values rather than the APA102's
+brightness field, which has only 31 steps — too few to dim smoothly.
+`--brightness` stays fixed as the hardware ceiling for the room.
+
+LVA folds a colour's magnitude into `brightness`, so a drag on the HA colour
+wheel arrives as a colour change *and* a brightness change together. Honouring
+both makes the ring lurch between levels while you are trying to judge a hue,
+so a brightness that arrives alongside a colour change is ignored. The
+brightness slider and any dimming automation send brightness on its own and
+work as expected.
 
 ## Development on a non-Pi machine
 

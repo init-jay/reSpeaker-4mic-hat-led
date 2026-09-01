@@ -253,6 +253,9 @@ class LedDirector:
         self._light_effect = self.VOICE_EFFECT
         self._light_color: animations.Color = animations.PURPLE
         self._light_level = 1.0
+        # The first command from HA is a full state sync, so both its colour
+        # and its brightness are taken; after that they are decoupled.
+        self._seen_light_command = False
         # Both are rebuilt only when a light_command changes them: the runner
         # compares animations by identity, so handing it fresh objects on every
         # refresh would restart whatever is playing, continuously.
@@ -354,14 +357,25 @@ class LedDirector:
 
         if "brightness" in data:
             # Applied to the RGB values, not to the APA102's 5-bit brightness
-            # field. LVA normalises colour so the largest channel is 1.0 and
-            # folds the intensity into brightness, so picking a colour always
-            # sends a brightness with it — through a 5-step field that would
-            # jump between "bright" and "nearly off" while choosing a hue.
+            # field, which has far too few steps to dim smoothly.
+            #
+            # Deliberately ignored when the same command also changed the
+            # colour. LVA folds a colour's magnitude into brightness, so a drag
+            # on the HA colour wheel arrives as a colour *and* a brightness
+            # change, and honouring both means the ring's level lurches around
+            # while you are trying to pick a hue. The brightness slider and any
+            # dimming automation send brightness on its own, which still works.
             level = _as_byte(data["brightness"], 255) / 255
-            if abs(level - self._light_level) > 1 / 512:
+            changed = abs(level - self._light_level) > 1 / 512
+            if changed and (not recolour or not self._seen_light_command):
                 self._light_level = level
                 recolour = True
+            elif changed:
+                _LOGGER.debug(
+                    "ignoring brightness %.2f sent with a colour change", level
+                )
+
+        self._seen_light_command = True
 
         if "effect" in data:
             requested = str(data["effect"] or "").strip()
