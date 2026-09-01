@@ -103,11 +103,14 @@ The first four run the voice pipeline; the last three turn the ring into a
 lamp, with the voice animations staying out of the way until a colour is
 picked again.
 
-The colour comes from the effect list because HA's colour wheel is not usable
-for this entity, so `supports_rgb` is false and no wheel is offered. Faults
-keep their own colours whatever is selected — a warning you can recolour is
-not a warning. Note that choosing Red or Yellow puts the pipeline close to the
-fault colours, which are then told apart only by movement.
+Colour can come from either the effect presets or the colour wheel. A preset
+applies at the moment it is selected; after that the wheel wins, because LVA
+repeats the current effect in every state echo and re-applying the preset each
+time would fight the wheel.
+
+Faults keep their own colours whatever is selected — a warning you can
+recolour is not a warning. Note that choosing Red or Yellow puts the pipeline
+close to the fault colours, which are then told apart only by movement.
 
 Brightness from HA is applied to the colour values rather than the APA102's
 brightness field, which has only 31 steps — too few to dim smoothly.

@@ -276,8 +276,9 @@ class LedDirector:
             "name": self.LIGHT_NAME,
             "object_id": self.LIGHT_OBJECT_ID,
             "effects": list(self.EFFECTS),
-            # The colour comes from the effect list, so no colour wheel.
-            "supports_rgb": False,
+            # LVA offers the colour wheel regardless of what we ask for here,
+            # so accept colours as well as the effect presets.
+            "supports_rgb": True,
             "supports_brightness": True,
         }
 
@@ -299,6 +300,17 @@ class LedDirector:
             self._set_ha_connected(True)
         elif event in ("disconnected", "ha_disconnected"):
             self._set_ha_connected(False)
+        elif event == "zeroconf":
+            # How LVA reports coming back: `disconnected` is followed by
+            # `zeroconf {"status": "connected"}` rather than a `connected`.
+            status = str(data.get("status", "")).strip().lower()
+            if status == "connected":
+                self._set_ha_connected(True)
+            elif status in ("disconnected", "lost"):
+                self._set_ha_connected(False)
+            else:
+                _LOGGER.debug("zeroconf status %r not understood", status)
+                return
         elif event == "pipeline_error":
             # One-shots must not interrupt the ring while it is being used as
             # a lamp, or while Home Assistant has it switched off.
@@ -359,19 +371,35 @@ class LedDirector:
                 self._light_level = level
                 recolour = True
 
+        if any(channel in data for channel in ("red", "green", "blue")):
+            colour = (
+                _as_byte(data.get("red"), self._light_color[0]),
+                _as_byte(data.get("green"), self._light_color[1]),
+                _as_byte(data.get("blue"), self._light_color[2]),
+            )
+            # An all-black colour would leave the ring dark with the light
+            # still nominally on.
+            if any(colour) and colour != self._light_color:
+                self._light_color = colour
+                recolour = True
+
         if "effect" in data:
             requested = str(data["effect"] or "").strip()
             match = {e.lower(): e for e in self.EFFECTS}.get(requested.lower())
             # "None" is ESPHome's no-effect selection; anything unrecognised
             # is treated the same way rather than left in a stale effect.
-            self._light_effect = match or ""
             if match is None and requested.lower() not in ("", "none"):
                 _LOGGER.warning("unknown effect %r, falling back to solid", requested)
 
-            # A voice effect names the ring's colour. The lamp effects keep
-            # whichever colour was last chosen.
-            colour = self.VOICE_COLOURS.get(self._light_effect)
-            if colour is not None and colour != self._light_color:
+            effect = match or ""
+            changed = effect != self._light_effect
+            self._light_effect = effect
+
+            # A preset names the ring's colour, but only at the moment it is
+            # selected — otherwise every state echo would overwrite a colour
+            # set on the wheel, since LVA repeats the effect in each one.
+            colour = self.VOICE_COLOURS.get(effect)
+            if changed and colour is not None and colour != self._light_color:
                 self._light_color = colour
                 recolour = True
 

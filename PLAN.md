@@ -82,6 +82,14 @@ wake_word_detected -> listening -> stt_text -> thinking -> tts_speaking
 - `tts_finished` and `idle` arrive back to back. Fade on `idle`, not on both.
 - `ha_connected` in the snapshot means LVA<->HA connectivity is distinct from
   our socket to LVA. Two different failure modes, not one.
+- Losing HA sends a bare `disconnected`; coming back sends
+  `zeroconf {"status": "connected"}`, not a `connected`. Watch for both or the
+  ring stays stuck on the fault animation.
+- `light_command` carries `red`/`green`/`blue`/`brightness` as 0.0-1.0 floats,
+  and repeats the *whole* light state every time, including the current
+  effect — so "the effect is present" does not mean it just changed.
+- LVA offers the colour wheel in HA whether or not `supports_rgb` is set false
+  at registration.
 
 `light_command` arrives when HA changes a Light entity we registered — carries
 `object_id`, `state`, `brightness`, `red`, `green`, `blue`, `effect`. The effect
