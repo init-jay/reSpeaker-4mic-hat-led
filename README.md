@@ -58,6 +58,29 @@ appends each event to a JSONL file, which is what Phase 3 maps to animations.
 
 Trigger the wake word and watch the pipeline events arrive. Ctrl-C to stop.
 
+## Phase 3 — animations
+
+The same command drives the ring. `--brightness 1-31` sets the ceiling
+(default 8 — 12 LEDs at full brightness is a lot in a room), `--no-leds` runs
+log-only on a machine without the hardware.
+
+| State | Ring |
+|---|---|
+| idle | dark, fading out from whatever was showing |
+| wake word | white flash settling to a steady ring |
+| listening | slow blue breath |
+| thinking | blue comet, one turn every 0.9s |
+| speaking | faster white pulse until `tts_finished` |
+| muted | solid red |
+| volume changed | white bar, one second |
+| pipeline error | three red flashes, then back |
+| timer ringing | alternating amber halves |
+| LVA unreachable | red twinkle |
+| HA unreachable | amber twinkle |
+
+The last two are separate faults: red means this program cannot reach LVA,
+amber means LVA is up but is not talking to Home Assistant.
+
 ## Development on a non-Pi machine
 
 `gpiozero` is marked `sys_platform == 'linux'`, so `uv sync` works on macOS and

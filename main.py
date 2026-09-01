@@ -25,6 +25,8 @@ from typing import Any, Awaitable, Callable, Optional, TextIO
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
+import animations
+
 DEFAULT_URI = "ws://localhost:6055"
 
 _LOGGER = logging.getLogger("lva-leds")
@@ -176,6 +178,85 @@ class PeripheralClient:
                 _LOGGER.exception("handler failed for event %r", event)
 
 
+class LedDirector:
+    """Maps peripheral events onto ring animations.
+
+    Pipeline state is only what shows when nothing more important is wrong.
+    Priority, highest first: our socket to LVA is down, muted, LVA cannot reach
+    Home Assistant, then the pipeline itself. The two connectivity faults are
+    genuinely different — LVA being gone is not the same as LVA being up but
+    unable to reach HA — so they get different animations.
+    """
+
+    _PIPELINE = {
+        "wake_word_detected": animations.WAKE,
+        "listening": animations.LISTENING,
+        "thinking": animations.THINKING,
+        "tts_speaking": animations.SPEAKING,
+        "idle": animations.IDLE,
+        "timer_ringing": animations.TIMER,
+    }
+
+    # tts_finished is deliberately absent: idle follows it immediately and
+    # carries the fade. stt_text/tts_text are text only, nothing to show.
+    _IGNORED = {"tts_finished", "stt_text", "tts_text"}
+
+    def __init__(self, runner: animations.AnimationRunner) -> None:
+        self._runner = runner
+        self._pipeline = animations.IDLE
+        self._muted = False
+        self._ha_connected = True
+        self._lva_connected = True
+
+    async def on_event(self, event: str, data: dict[str, Any]) -> None:
+        if event == "snapshot":
+            self._muted = bool(data.get("muted", False))
+            self._ha_connected = bool(data.get("ha_connected", True))
+        elif event == "muted":
+            self._muted = bool(data.get("muted", True))
+        elif event == "connected":
+            self._ha_connected = True
+        elif event == "disconnected":
+            self._ha_connected = False
+        elif event == "pipeline_error":
+            self._runner.flash(animations.ERROR)
+            return
+        elif event == "volume_changed":
+            volume = data.get("volume")
+            if isinstance(volume, (int, float)):
+                self._runner.flash(animations.volume(float(volume)))
+            return
+        elif event in self._IGNORED:
+            return
+        elif event in self._PIPELINE:
+            self._pipeline = self._PIPELINE[event]
+        else:
+            _LOGGER.debug("no animation for event %r", event)
+            return
+
+        self._refresh()
+
+    async def on_connected(self) -> None:
+        self._lva_connected = True
+        self._refresh()
+
+    async def on_disconnected(self) -> None:
+        self._lva_connected = False
+        self._refresh()
+
+    def _refresh(self) -> None:
+        if not self._lva_connected:
+            state = animations.LVA_DOWN
+        elif self._muted:
+            state = animations.MUTED
+        elif not self._ha_connected:
+            state = animations.HA_DOWN
+        else:
+            state = self._pipeline
+
+        self._runner.set_state(state)
+
+
 class EventRecorder:
     """Appends every event to a JSONL file for offline inspection."""
 
@@ -198,17 +279,41 @@ class EventRecorder:
 async def _amain(args: argparse.Namespace) -> int:
     recorder = EventRecorder(args.record) if args.record else None
 
+    leds = None
+    runner = None
+    director = None
+    if not args.no_leds:
+        # Imported here so the client still runs on a machine without the
+        # hardware — useful for reading the event stream from a laptop.
+        from apa102 import APA102
+
+        leds = APA102(args.num_leds, global_brightness=args.brightness)
+        runner = animations.AnimationRunner(leds)
+        director = LedDirector(runner)
+
     async def on_event(event: str, data: dict[str, Any]) -> None:
         if event == "snapshot":
             _LOGGER.info("initial state: %s", data or "(empty)")
         if recorder is not None:
             await recorder(event, data)
+        if director is not None:
+            await director.on_event(event, data)
+
+    async def on_connected() -> None:
+        if director is not None:
+            await director.on_connected()
 
     async def on_disconnected() -> None:
-        # Phase 3 shows the red twinkle from here.
         _LOGGER.warning("disconnected from LVA")
+        if director is not None:
+            await director.on_disconnected()
 
-    client = PeripheralClient(args.uri, on_event=on_event, on_disconnected=on_disconnected)
+    client = PeripheralClient(
+        args.uri,
+        on_event=on_event,
+        on_connected=on_connected,
+        on_disconnected=on_disconnected,
+    )
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -218,6 +323,10 @@ async def _amain(args: argparse.Namespace) -> int:
     try:
         await client.run()
     finally:
+        if runner is not None:
+            await runner.close()
+        if leds is not None:
+            leds.close()
         if recorder is not None:
             recorder.close()
 
@@ -233,6 +342,18 @@ def main() -> int:
         type=Path,
         metavar="PATH",
         help="append every event to this file as JSONL",
+    )
+    parser.add_argument(
+        "--brightness",
+        type=int,
+        default=8,
+        help="ring brightness ceiling, 1-31 (default: %(default)s)",
+    )
+    parser.add_argument("--num-leds", type=int, default=12)
+    parser.add_argument(
+        "--no-leds",
+        action="store_true",
+        help="log events only, do not touch the hardware",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="log raw traffic")
     args = parser.parse_args()

@@ -112,10 +112,10 @@ Exit criteria: full event stream logged during a voice interaction.
 
 ### Phase 3 — Animations
 
-- [ ] Animation loop on its own task so long animations don't block the socket
-- [ ] Map each event to an animation; cancel the running one on state change
-- [ ] Tune brightness — 12 LEDs at full brightness in a kitchen is a lot
-- [ ] Implement `disconnected` and `pipeline_error` as specified above
+- [x] Animation loop on its own task so long animations don't block the socket
+- [x] Map each event to an animation; cancel the running one on state change
+- [x] Tune brightness — 12 LEDs at full brightness in a kitchen is a lot
+- [x] Implement `disconnected` and `pipeline_error` as specified above
 
 Exit criteria: LEDs track a full voice interaction end to end.
 

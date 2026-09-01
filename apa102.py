@@ -99,6 +99,22 @@ class APA102:
         self._buf[offset + 2] = _clamp(green, 0, 255)
         self._buf[offset + 3] = _clamp(red, 0, 255)
 
+    def get_pixel(self, index: int) -> tuple[int, int, int]:
+        """Return the staged ``(red, green, blue)`` of one pixel.
+
+        Lets an animation fade out from whatever is already showing instead of
+        having to be told what the previous state was.
+        """
+        if not 0 <= index < self.num_leds:
+            return (0, 0, 0)
+
+        offset = index * _BYTES_PER_LED
+        return (
+            self._buf[offset + 3],
+            self._buf[offset + 2],
+            self._buf[offset + 1],
+        )
+
     def fill(
         self,
         red: int,
