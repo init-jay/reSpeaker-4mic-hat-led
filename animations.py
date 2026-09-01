@@ -38,8 +38,9 @@ Color = tuple[int, int, int]
 
 RED: Color = (255, 0, 0)
 AMBER: Color = (255, 110, 0)
-BLUE: Color = (40, 120, 255)
 # Weighted away from pure magenta so it still reads as purple once dimmed.
+# Every pipeline state uses it; they are told apart by movement, not colour.
+# Red and amber are reserved for faults.
 PURPLE: Color = (150, 20, 255)
 
 _LOGGER = logging.getLogger("lva-leds.animations")
@@ -125,15 +126,14 @@ async def _idle(leds: "APA102") -> None:
 
 
 async def _wake(leds: "APA102") -> None:
-    """Red flash on the full ring, settling to a steady purple."""
-    await _ramp(leds, RED, 0.0, 1.0, 0.06)
-    await _ramp(leds, RED, 1.0, 0.25, 0.20)
-    await _ramp(leds, PURPLE, 0.25, 0.45, 0.10)
+    """Bright purple flash on the full ring, settling to a steady level."""
+    await _ramp(leds, PURPLE, 0.0, 1.0, 0.06)
+    await _ramp(leds, PURPLE, 1.0, 0.45, 0.24)
     await _forever()
 
 
 async def _listening(leds: "APA102") -> None:
-    await _pulse(leds, BLUE, 0.15, 0.65, period=2.5)
+    await _pulse(leds, PURPLE, 0.15, 0.65, period=2.5)
 
 
 async def _thinking(leds: "APA102") -> None:
@@ -144,7 +144,7 @@ async def _thinking(leds: "APA102") -> None:
         head = int(position) % leds.num_leds
         for index in range(leds.num_leds):
             distance = (head - index) % leds.num_leds
-            leds.set_pixel(index, *scale(BLUE, tail**distance))
+            leds.set_pixel(index, *scale(PURPLE, tail**distance))
         leds.show()
         position += leds.num_leds * FRAME / 0.9
         await asyncio.sleep(FRAME)

@@ -67,9 +67,9 @@ log-only on a machine without the hardware.
 | State | Ring |
 |---|---|
 | idle | dark, fading out from whatever was showing |
-| wake word | red flash settling to steady purple |
-| listening | slow blue breath |
-| thinking | blue comet, one turn every 0.9s |
+| wake word | bright purple flash settling to a steady ring |
+| listening | slow purple breath |
+| thinking | purple comet, one turn every 0.9s |
 | speaking | faster purple pulse until `tts_finished` |
 | muted | solid red |
 | volume changed | purple bar, one second |
@@ -78,8 +78,9 @@ log-only on a machine without the hardware.
 | LVA unreachable | red twinkle |
 | HA unreachable | amber twinkle |
 
-The last two are separate faults: red means this program cannot reach LVA,
-amber means LVA is up but is not talking to Home Assistant.
+Every pipeline state is purple and is told apart by movement. Red and amber
+mean something is wrong: red for muted or unreachable LVA, amber for LVA being
+up but unable to reach Home Assistant.
 
 ## Development on a non-Pi machine
 
