@@ -129,7 +129,9 @@ docker compose logs -f
 
 The image installs `python3-lgpio`, `python3-spidev`, `python3-gpiozero` and
 `python3-websockets` from apt, so there is no compiler and no pip in it — the
-same reasoning as the host setup above.
+same reasoning as the host setup above. `python3-lgpio` is a Raspberry Pi OS
+package rather than a Debian one, so the Dockerfile adds the Raspberry Pi
+archive that the host already uses; everything else comes from Debian.
 
 It needs three things from the host, all in `docker-compose.yml`:
 
