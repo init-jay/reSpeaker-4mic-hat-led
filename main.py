@@ -239,16 +239,8 @@ class LedDirector:
     # carries the fade. stt_text/tts_text are text only, nothing to show.
     _IGNORED = {"tts_finished", "stt_text", "tts_text"}
 
-    def __init__(
-        self,
-        runner: animations.AnimationRunner,
-        *,
-        leds: Optional[Any] = None,
-        max_brightness: int = 31,
-    ) -> None:
+    def __init__(self, runner: animations.AnimationRunner) -> None:
         self._runner = runner
-        self._leds = leds
-        self._max_brightness = max_brightness
 
         self._pipeline_key = "idle"
         self._muted = False
@@ -265,7 +257,7 @@ class LedDirector:
         # compares animations by identity, so handing it fresh objects on every
         # refresh would restart whatever is playing, continuously.
         self._effect_animation = animations.solid(self._light_color)
-        self._pipeline_animations = self._build_pipeline()
+        self._states = self._build_states()
 
     @property
     def registration(self) -> dict[str, Any]:
@@ -283,12 +275,8 @@ class LedDirector:
             # Proof that HA is reachable, whatever we last inferred from the
             # connectivity events — this command came from it.
             self._set_ha_connected(True)
-            redraw = self._handle_light_command(data)
+            self._handle_light_command(data)
             self._refresh()
-            if redraw:
-                # A static state has already drawn its only frame, so the new
-                # brightness would not appear until the state next changed.
-                self._runner.restart()
             return
 
         if event == "snapshot":
@@ -304,12 +292,12 @@ class LedDirector:
             # One-shots must not interrupt the ring while it is being used as
             # a lamp, or while Home Assistant has it switched off.
             if self._voice_mode:
-                self._runner.flash(animations.ERROR)
+                self._runner.flash(animations.error(self._light_level))
             return
         elif event == "volume_changed":
             volume = data.get("volume")
             if self._voice_mode and isinstance(volume, (int, float)):
-                self._runner.flash(animations.volume(float(volume), self._light_color))
+                self._runner.flash(animations.volume(float(volume), self._tint))
             return
         elif event in self._IGNORED:
             return
@@ -329,6 +317,11 @@ class LedDirector:
         self._lva_connected = False
         self._refresh()
 
+    @property
+    def _tint(self) -> animations.Color:
+        """The light's colour with its brightness applied."""
+        return animations.scale(self._light_color, self._light_level)
+
     def _set_ha_connected(self, connected: bool) -> None:
         if connected != self._ha_connected:
             _LOGGER.info("home assistant %s", "reachable" if connected else "unreachable")
@@ -339,10 +332,9 @@ class LedDirector:
         """True when the ring is acting as the assistant's status display."""
         return self._light_on and self._light_effect == self.VOICE_EFFECT
 
-    def _handle_light_command(self, data: dict[str, Any]) -> bool:
-        """Apply a light command. Returns True if the ring needs redrawing."""
+    def _handle_light_command(self, data: dict[str, Any]) -> None:
         if data.get("object_id") not in (None, self.LIGHT_OBJECT_ID):
-            return False  # meant for some other peripheral's entity
+            return  # meant for some other peripheral's entity
 
         if "state" in data:
             self._light_on = _as_bool(data["state"])
@@ -360,16 +352,16 @@ class LedDirector:
                 self._light_color = colour
                 recolour = True
 
-        redraw = False
         if "brightness" in data:
-            redraw = True
-            self._light_level = _as_byte(data["brightness"], 255) / 255
-            if self._leds is not None:
-                # Scale within the ceiling the ring was opened with rather than
-                # up to 31, so the room tuning survives the HA slider.
-                self._leds.global_brightness = max(
-                    1, round(self._light_level * self._max_brightness)
-                )
+            # Applied to the RGB values, not to the APA102's 5-bit brightness
+            # field. LVA normalises colour so the largest channel is 1.0 and
+            # folds the intensity into brightness, so picking a colour always
+            # sends a brightness with it — through a 5-step field that would
+            # jump between "bright" and "nearly off" while choosing a hue.
+            level = _as_byte(data["brightness"], 255) / 255
+            if abs(level - self._light_level) > 1 / 512:
+                self._light_level = level
+                recolour = True
 
         if "effect" in data:
             requested = str(data["effect"] or "").strip()
@@ -382,9 +374,9 @@ class LedDirector:
 
         self._effect_animation = self._build_effect()
         if recolour:
-            # New objects, so _refresh swaps the running animation for the
-            # recoloured one by itself.
-            self._pipeline_animations = self._build_pipeline()
+            # Fresh objects, so _refresh swaps whatever is running for the
+            # recoloured version by itself — no explicit redraw needed.
+            self._states = self._build_states()
         _LOGGER.info(
             "light: %s effect=%r rgb=%s level=%.2f",
             "on" if self._light_on else "off",
@@ -392,28 +384,31 @@ class LedDirector:
             self._light_color,
             self._light_level,
         )
-        # Only the voice states park after one frame; an effect animation is a
-        # fresh object here, so _refresh restarts it on its own.
-        return redraw and self._voice_mode
 
-    def _build_pipeline(self) -> dict[str, animations.Animation]:
-        """The pipeline animations in the light's current colour."""
-        colour = self._light_color
+    def _build_states(self) -> dict[str, animations.Animation]:
+        """Every state animation, in the light's current colour and level."""
+        # Brightness rides on the colour rather than the hardware's 5-bit
+        # field, which has far too few steps to dim smoothly.
+        tint = self._tint
+        level = self._light_level
         return {
-            "wake": animations.wake(colour),
-            "listening": animations.listening(colour),
-            "thinking": animations.thinking(colour),
-            "speaking": animations.speaking(colour),
+            "wake": animations.wake(tint),
+            "listening": animations.listening(tint),
+            "thinking": animations.thinking(tint),
+            "speaking": animations.speaking(tint),
             "idle": animations.IDLE,
-            "timer": animations.TIMER,
+            "timer": animations.timer(level),
+            "muted": animations.muted(level),
+            "lva_down": animations.lva_down(level),
+            "ha_down": animations.ha_down(level),
         }
 
     def _build_effect(self) -> animations.Animation:
         if self._light_effect == "Rainbow":
-            return animations.rainbow(1.0)
+            return animations.rainbow(self._light_level)
         if self._light_effect == "Breathe":
-            return animations.breathe(self._light_color)
-        return animations.solid(self._light_color)
+            return animations.breathe(self._tint)
+        return animations.solid(self._tint)
 
     def _refresh(self) -> None:
         if not self._light_on:
@@ -425,15 +420,15 @@ class LedDirector:
             return
 
         if not self._lva_connected:
-            state = animations.LVA_DOWN
+            key = "lva_down"
         elif self._muted:
-            state = animations.MUTED
+            key = "muted"
         elif not self._ha_connected:
-            state = animations.HA_DOWN
+            key = "ha_down"
         else:
-            state = self._pipeline_animations[self._pipeline_key]
+            key = self._pipeline_key
 
-        self._runner.set_state(state)
+        self._runner.set_state(self._states[key])
 
 
 class EventRecorder:
@@ -468,7 +463,7 @@ async def _amain(args: argparse.Namespace) -> int:
 
         leds = APA102(args.num_leds, global_brightness=args.brightness)
         runner = animations.AnimationRunner(leds)
-        director = LedDirector(runner, leds=leds, max_brightness=args.brightness)
+        director = LedDirector(runner)
 
     async def on_event(event: str, data: dict[str, Any]) -> None:
         if event == "snapshot":

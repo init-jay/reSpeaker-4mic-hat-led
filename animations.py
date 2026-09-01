@@ -175,53 +175,72 @@ def speaking(color: Color = PURPLE) -> Animation:
     return Animation("speaking", run)
 
 
-async def _muted(leds: "APA102") -> None:
-    leds.fill(*scale(RED, 0.5))
-    leds.show()
-    await _forever()
+# The faults keep their own colours — a recolourable warning is no warning —
+# but they still take the light's level so that dimming applies to everything.
 
 
-async def _lva_down(leds: "APA102") -> None:
+def muted(level: float = 1.0) -> Animation:
+    async def run(leds: "APA102") -> None:
+        leds.fill(*scale(RED, 0.5 * level))
+        leds.show()
+        await _forever()
+
+    return Animation("muted", run)
+
+
+def lva_down(level: float = 1.0) -> Animation:
     """Our own socket to LVA is gone."""
-    await _twinkle(leds, RED, 0.7)
+
+    async def run(leds: "APA102") -> None:
+        await _twinkle(leds, RED, 0.7 * level)
+
+    return Animation("lva_down", run)
 
 
-async def _ha_down(leds: "APA102") -> None:
+def ha_down(level: float = 1.0) -> Animation:
     """LVA is up but is not talking to Home Assistant — a different fault."""
-    await _twinkle(leds, AMBER, 0.6)
+
+    async def run(leds: "APA102") -> None:
+        await _twinkle(leds, AMBER, 0.6 * level)
+
+    return Animation("ha_down", run)
 
 
-async def _timer(leds: "APA102") -> None:
+def timer(level: float = 1.0) -> Animation:
     """Alternating halves, fast enough to demand attention."""
-    on = True
-    while True:
-        for index in range(leds.num_leds):
-            lit = (index < leds.num_leds // 2) == on
-            leds.set_pixel(index, *(AMBER if lit else (0, 0, 0)))
-        leds.show()
-        on = not on
-        await asyncio.sleep(0.25)
+
+    async def run(leds: "APA102") -> None:
+        lit_colour = scale(AMBER, level)
+        on = True
+        while True:
+            for index in range(leds.num_leds):
+                lit = (index < leds.num_leds // 2) == on
+                leds.set_pixel(index, *(lit_colour if lit else (0, 0, 0)))
+            leds.show()
+            on = not on
+            await asyncio.sleep(0.25)
+
+    return Animation("timer", run)
 
 
-async def _error(leds: "APA102") -> None:
+def error(level: float = 1.0) -> Animation:
     """Three red flashes, then hand back to whatever state is current."""
-    for _ in range(3):
-        leds.fill(*RED)
-        leds.show()
-        await asyncio.sleep(0.12)
-        leds.clear()
-        await asyncio.sleep(0.12)
+
+    async def run(leds: "APA102") -> None:
+        for _ in range(3):
+            leds.fill(*scale(RED, level))
+            leds.show()
+            await asyncio.sleep(0.12)
+            leds.clear()
+            await asyncio.sleep(0.12)
+
+    return Animation("error", run, min_hold=0.75)
 
 
 IDLE = Animation("idle", _idle)
 # Same fade-then-dark as idle, kept separate so logs say which one is meant:
 # idle is "the assistant is resting", off is "Home Assistant turned the light off".
 OFF = Animation("off", _idle)
-MUTED = Animation("muted", _muted)
-LVA_DOWN = Animation("lva_down", _lva_down)
-HA_DOWN = Animation("ha_down", _ha_down)
-TIMER = Animation("timer", _timer)
-ERROR = Animation("error", _error, min_hold=0.75)
 
 
 def volume(level: float, color: Color = PURPLE) -> Animation:
@@ -316,17 +335,6 @@ class AnimationRunner:
 
     def flash(self, animation: Animation) -> None:
         self._transient = animation
-        self._request()
-
-    def restart(self) -> None:
-        """Redraw the current animation from the top.
-
-        Static states draw one frame and then park, so a change to the ring's
-        brightness ceiling would not show until the state next changed. This
-        forces the frame to be drawn again.
-        """
-        # Clearing _current is what makes _apply see a difference and switch.
-        self._current = None
         self._request()
 
     def _request(self) -> None:
