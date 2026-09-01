@@ -2,3 +2,5 @@
 __pycache__/
 *.py[cod]
 events.jsonl
+.DS_Store
+docs/demo.mp4

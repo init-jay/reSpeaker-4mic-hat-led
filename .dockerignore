@@ -1,10 +1,12 @@
 .git/
 .venv/
+docs/
 __pycache__/
 *.py[cod]
 events.jsonl
 test_leds.py
 PLAN.md
 README.md
+CONTRIBUTING.md
 uv.lock
 pyproject.toml

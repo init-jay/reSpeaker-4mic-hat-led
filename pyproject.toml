@@ -19,7 +19,7 @@ dependencies = [
 #
 # Both are prebuilt on Raspberry Pi OS, which keeps a build toolchain out of the
 # picture entirely — including the Phase 5 image. The venv is created with
-# --system-site-packages so it can import them; see README.md.
+# --system-site-packages so it can import them; see CONTRIBUTING.md.
 
 [tool.uv]
 package = false

@@ -1,160 +1,133 @@
-# reSpeaker-4mic-hat-led
+# reSpeaker 4-Mic LED Ring
 
-Drive the 12 APA102 LEDs on the ReSpeaker 4-Mic Array from Linux Voice
-Assistant's peripheral WebSocket API. See [PLAN.md](PLAN.md).
+Turns the 12 LEDs on a ReSpeaker 4-Mic Array into a status ring for
+[Linux Voice Assistant](https://github.com/OHF-Voice/linux-voice-assistant):
+the ring lights when the wake word fires, animates through listening,
+thinking and speaking, and shows you when something is wrong.
 
-## Setup (on the Pi)
+It also registers itself in Home Assistant as a light, so you can recolour it,
+dim it on a schedule, or turn it off at night.
 
-`lgpio` (gpiozero's pin factory) and `spidev` both build C from PyPI — lgpio
-additionally wants SWIG and the lgpio C library. Raspberry Pi OS ships both
-prebuilt, so install them from apt and let the venv see the system path. No
-compiler needed:
+<!-- Hosted on GitHub's asset CDN rather than committed, so it renders as an
+     inline player. It has to stay a bare URL on its own line for that to
+     work; wrapping it in markdown turns it back into a link. -->
 
-```sh
-sudo apt install -y python3-lgpio python3-spidev
-rm -rf .venv
-uv venv --system-site-packages --python /usr/bin/python3
-uv sync
-```
+https://github.com/user-attachments/assets/8bb6fda4-4476-4893-b293-29563571e7db
 
-The `--python /usr/bin/python3` matters: the apt packages are installed for the
-system interpreter, so a uv-managed Python would not find them. Check with
+Demo of the LED ring tracking a voice interaction.
 
-```sh
-uv run python -c "import lgpio, spidev; print(lgpio.__file__)"
-```
+## Requirements
 
-which should print a path under `/usr/lib/python3/dist-packages`.
+- A Raspberry Pi with a ReSpeaker 4-Mic Array HAT
+- Linux Voice Assistant already running on it, with its peripheral API on
+  `ws://localhost:6055` (the default)
+- Docker with the compose plugin
 
-`uv sync` recreates `.venv` if it disagrees with the project, and a recreated
-one loses `--system-site-packages`. If `lgpio` or `spidev` stop importing, run
-the `uv venv` line again.
+[PiCompose](https://github.com/florian-asche/PiCompose) is the recommended way
+to get Linux Voice Assistant onto the Pi in the first place, and is what this
+was built against. It deploys anything under `/compose/`, so if you are using
+it, put this there and it will be picked up like the rest.
 
-## Phase 1 — hardware check
+SPI is enabled by the `seeed-4mic-voicecard` overlay, so `/dev/spidev0.0`
+should already exist. Check with `ls /dev/spidev*`.
 
-```sh
-uv run python test_leds.py
-```
-
-All 12 LEDs cycle red, green, blue, off; then a single white pixel walks once
-around the ring; then all 12 ramp brightness up and back down.
-
-If red and blue are swapped, the per-LED byte order in `apa102.py` is wrong.
-If nothing lights at all, GPIO5 is not being held high — that pin gates VCC to
-the ring.
-
-Useful flags: `--brightness 1-31`, `--hold`, `--step`, `--num-leds`.
-
-## Phase 2 — event stream
+## Install
 
 ```sh
-uv run python main.py --record events.jsonl
+git clone https://github.com/init-jay/reSpeaker-4mic-hat-led
+cd reSpeaker-4mic-hat-led
+docker compose up -d --build
 ```
 
-Connects to `ws://localhost:6055`, logs every event, and reconnects with
-exponential backoff (1s doubling to 30s) whenever LVA goes away. `--record`
-appends each event to a JSONL file, which is what Phase 3 maps to animations.
-`--uri` points it elsewhere, `-v` adds raw traffic.
+Under PiCompose, clone it to `/compose/leds` instead and it deploys itself.
 
-Trigger the wake word and watch the pipeline events arrive. Ctrl-C to stop.
+That is the whole install. The ring should light up the next time you use the
+wake word.
 
-## Phase 3 — animations
+To watch what it is doing:
 
-The same command drives the ring. `--brightness 1-31` sets the ceiling
-(default 5 — 12 LEDs at full brightness is a lot in a room), `--no-leds` runs
-log-only on a machine without the hardware.
+```sh
+docker compose logs -f
+```
+
+## What the ring shows
 
 | State | Ring |
 |---|---|
 | idle | dark, fading out from whatever was showing |
-| wake word | bright purple flash settling to a steady ring |
-| listening | slow purple breath |
-| thinking | purple comet, one turn every 0.9s |
-| speaking | faster purple pulse until `tts_finished` |
+| wake word | bright flash settling to a steady ring |
+| listening | slow breath |
+| thinking | comet, one turn every 0.9s |
+| speaking | faster pulse, until speech ends |
+| volume changed | a bar showing the new level, one second |
 | muted | solid red |
-| volume changed | purple bar, one second |
-| pipeline error | three red flashes, then back |
 | timer ringing | alternating amber halves |
+| pipeline error | three red flashes, then back |
 | LVA unreachable | red twinkle |
-| HA unreachable | amber twinkle |
+| Home Assistant unreachable | amber twinkle |
 
-Every pipeline state is purple and is told apart by movement. Red and amber
-mean something is wrong: red for muted or unreachable LVA, amber for LVA being
-up but unable to reach Home Assistant.
+The pipeline states are all one colour — purple unless you change it — and are
+told apart by how they move. Red and amber always mean something is wrong.
 
-## Phase 4 — Home Assistant light
+## Home Assistant
 
-On connect the ring registers itself as a Light entity (`led_ring`, "LED
-Ring") under the ESPHome device, supporting RGB, brightness and three effects.
-It re-registers on every reconnect, since a restarted LVA has forgotten it.
+The ring appears as a light called **LED Ring** under your existing Linux
+Voice Assistant device, alongside its other entities. Nothing to configure: it
+registers itself on connect.
 
-The entity owns the ring:
-
-| Entity state | Ring |
+| Effect | Ring |
 |---|---|
-| off | dark; the pipeline does not draw |
-| on, "Voice Assistant" | the status animations above, in purple (the default) |
-| on, "Green" / "Red" / "Yellow" | the same, in that colour |
-| on, "Rainbow" | hues rotating once every four seconds |
-| on, "Breathe" | slow breath in the colour last chosen |
-| on, no effect | solid, in the colour last chosen |
+| Voice Assistant | the animations above, in purple (the default) |
+| Green / Red / Yellow | the same, in that colour |
+| Rainbow | hues rotating once every four seconds |
+| Breathe | slow breath in the colour last chosen |
+| no effect | solid colour |
 
-The first four run the voice pipeline; the last three turn the ring into a
-lamp, with the voice animations staying out of the way until a colour is
-picked again.
+The first four keep the ring working as a status display. The last three turn
+it into a small lamp and stop the voice animations drawing over it.
 
-Colour can come from either the effect presets or the colour wheel. A preset
-applies at the moment it is selected; after that the wheel wins, because LVA
-repeats the current effect in every state echo and re-applying the preset each
-time would fight the wheel.
+The colour wheel works too, and applies to the voice animations — so the
+status ring can be any colour you like. Faults keep their own red and amber
+regardless, since a warning you can recolour is not much of a warning.
 
-Faults keep their own colours whatever is selected — a warning you can
-recolour is not a warning. Note that choosing Red or Yellow puts the pipeline
-close to the fault colours, which are then told apart only by movement.
+The brightness slider dims everything, and is a good thing to put on a
+schedule if the ring is somewhere you sleep. Turning the light off leaves the
+ring dark even during a conversation.
 
-Brightness from HA is applied to the colour values rather than the APA102's
-brightness field, which has only 31 steps — too few to dim smoothly.
-`--brightness` stays fixed as the hardware ceiling for the room.
+> If the entity does not appear, restart Linux Voice Assistant while this
+> container is running. It only publishes its entity list on startup, so it
+> needs to see the ring register.
 
-## Phase 5 — deployment
+## Configuration
 
-Runs as a compose project, which PiCompose auto-deploys from `/compose/`:
+Flags go on the `command:` line in `docker-compose.yml`; then
+`docker compose up -d`.
 
-```sh
-sudo git clone https://github.com/init-jay/reSpeaker-4mic-hat-led /compose/leds
-cd /compose/leds
-docker compose up -d --build
-docker compose logs -f
-```
+| Flag | Default | Meaning |
+|---|---|---|
+| `--brightness` | `5` | Hardware ceiling, 1-31. 12 LEDs at full brightness is a lot in a room; the Home Assistant slider dims within this |
+| `--uri` | `ws://localhost:6055` | Where to find the peripheral API |
+| `--num-leds` | `12` | Ring size |
+| `-v` | off | Log raw traffic, for when something is not behaving |
 
-The image installs `python3-spidev`, `python3-gpiozero` and
-`python3-websockets` from Debian, so there is no compiler and no pip in it —
-the same reasoning as the host setup above.
+## If something is wrong
 
-It does not use `lgpio`, which the host does. That package is Raspberry Pi
-OS's rather than Debian's, and pulling in that archive means trusting a
-signing key whose self-signature is SHA1 — rejected outright by trixie's
-verifier since February 2026. Holding one pin high does not justify weakening
-signature checking, so the container uses gpiozero's own `native` pin factory,
-which is pure Python and maps `/dev/gpiomem`.
+**Nothing lights up at all.** GPIO5 gates power to the ring, so this usually
+means GPIO is not reachable. Check `/dev/gpiomem` exists and that the
+container has it mapped.
 
-It needs three things from the host, all in `docker-compose.yml`:
+**The ring is dark but the logs look fine.** Idle *is* dark. Say the wake word
+and see whether it responds. Also check the light is not switched off in Home
+Assistant.
 
-- `network_mode: host`, because LVA runs that way and its peripheral API is
-  only on the host's own localhost
-- `/dev/spidev0.0`, the ring
-- `/dev/gpiomem`, for GPIO5 which gates power to the ring — `privileged: true`
-  is not needed. `/dev/gpiochip0` is mapped too, so switching pin factories
-  later needs no compose change
+**Red twinkle that does not stop.** The container cannot reach Linux Voice
+Assistant. It keeps retrying, so this clears by itself once LVA is back.
 
-There is deliberately no `depends_on`: LVA is a separate compose project, and
-the reconnect loop copes with it being absent or restarting.
+**Amber twinkle.** LVA is running but cannot reach Home Assistant. Look at
+LVA, not at this.
 
-Change flags in the `command:` line, then `docker compose up -d`.
+## Development
 
-## Development on a non-Pi machine
-
-`gpiozero` is marked `sys_platform == 'linux'`, so `uv sync` works on macOS and
-installs only `websockets`. `spidev` and `lgpio` come from apt on the Pi and
-are not pip dependencies at all. The LED code imports the hardware modules at
-module scope and will not run off the Pi.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for running from source, the hardware
+test script, and how the pieces fit together. [PLAN.md](PLAN.md) has the
+design notes and what the peripheral API actually sends.
